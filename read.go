@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,19 @@ func readInt32(r *bufio.Reader, sz int, v *int32) (int, error) {
 
 func readInt64(r *bufio.Reader, sz int, v *int64) (int, error) {
 	return peekRead(r, sz, 8, func(b []byte) { *v = makeInt64(b) })
+}
+
+func readVarint(r *bufio.Reader, sz int, v *int64) (int, error) {
+	b, err := r.Peek(8)
+	if err != nil {
+		return sz, err
+	}
+
+	tmp, n := binary.Varint(b)
+
+	*v = tmp
+
+	return discardN(r, sz, n)
 }
 
 func readBool(r *bufio.Reader, sz int, v *bool) (int, error) {
