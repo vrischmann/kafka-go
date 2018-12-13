@@ -25,7 +25,7 @@ func readRecordHeader(reader *bufio.Reader, remain int) (hdr recordHeader, err e
 		return
 	}
 
-	if remain, err = readBytes(reader, remain, &hdr.Value); err != nil {
+	if hdr.Value, remain, err = readNewBytes(reader, remain, int(valueLength)); err != nil {
 		return
 	}
 
@@ -33,12 +33,60 @@ func readRecordHeader(reader *bufio.Reader, remain int) (hdr recordHeader, err e
 }
 
 type record struct {
-	Attributes  int8
-	Timestamp   int64
-	OffsetDelta int64
-	Key         []byte
-	Value       []byte
-	Headers     []recordHeader
+	Attributes     int8
+	TimestampDelta int64
+	OffsetDelta    int64
+	Key            []byte
+	Value          []byte
+	Headers        []recordHeader
+}
+
+func readRecord(reader *bufio.Reader, remain int) (rec record, err error) {
+	if remain, err = readInt8(reader, remain, &rec.Attributes); err != nil {
+		return
+	}
+
+	if remain, err = readVarint(reader, remain, &rec.TimestampDelta); err != nil {
+		return
+	}
+
+	if remain, err = readVarint(reader, remain, &rec.OffsetDelta); err != nil {
+		return
+	}
+
+	var (
+		keyLength   int64
+		valueLength int64
+	)
+
+	if remain, err = readVarint(reader, remain, &keyLength); err != nil {
+		return
+	}
+
+	if rec.Key, remain, err = readNewBytes(reader, remain, int(keyLength)); err != nil {
+		return
+	}
+
+	if remain, err = readVarint(reader, remain, &valueLength); err != nil {
+		return
+	}
+
+	if rec.Value, remain, err = readNewBytes(reader, remain, int(valueLength)); err != nil {
+		return
+	}
+
+	remain, err = readArrayWith(reader, remain, func(reader *bufio.Reader, sz int) (int, error) {
+		hdr, err := readRecordHeader(reader, sz)
+		if err != nil {
+			return sz, err
+		}
+
+		rec.Headers = append(rec.Headers, hdr)
+
+		return nil
+	})
+
+	return
 }
 
 type recordBatch struct {
